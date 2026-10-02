@@ -56,6 +56,10 @@
     <key name="apply-icc-profile" type="b">
       <default>true</default>
     </key>
+    <key name="drag-to-zoom" type="b">
+      <default>false</default>
+      <description>Whether dragging with the left button on an image that fits the window selects an area to zoom to, instead of dragging the file.</description>
+    </key>
   </schema>
 
   <schema id="org.gnome.gthumb.viewers.videos" path="/org/gnome/gthumb/viewers/videos/" gettext-domain="gthumb">

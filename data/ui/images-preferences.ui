@@ -26,6 +26,21 @@
                     </property>
                   </object>
                 </child>
+                <child>
+                  <object class="AdwComboRow" id="drag_action">
+                    <property name="title" translatable="yes">Drag Action</property>
+                    <property name="subtitle" translatable="yes">Ctrl+drag always drags the file</property>
+                    <signal name="notify::selected" handler="on_drag_action_selected"/>
+                    <property name="model">
+                      <object class="GtkStringList">
+                        <items>
+                          <item translatable="yes">Drag the File</item>
+                          <item translatable="yes">Zoom to Selection</item>
+                        </items>
+                      </object>
+                    </property>
+                  </object>
+                </child>
               </object>
             </child>
           </object>

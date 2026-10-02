@@ -158,6 +158,16 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 		}
 	}
 
+	// When the image fits the window, dragging selects an area to zoom to.
+	public bool drag_to_zoom {
+		get { return _drag_to_zoom; }
+		set {
+			_drag_to_zoom = value;
+			stop_zoom_selection ();
+			update_zoom_cursor ();
+		}
+	}
+
 	public float max_zoom;
 
 	public float min_zoom;
@@ -208,31 +218,71 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 		drag_gesture = new Gtk.GestureDrag ();
 		drag_gesture.drag_begin.connect ((controller, start_x, start_y) => {
 			drag_start = { -1, -1 };
+			var state = controller.get_current_event_state ();
 			if (!scroll_on_drag) {
+				if (can_select_zoom_area ()
+					&& ((state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.SHIFT_MASK)) == 0))
+				{
+					// Claiming the sequence stops the viewer from dragging
+					// the file, which is done with Ctrl+drag instead.
+					controller.set_state (Gtk.EventSequenceState.CLAIMED);
+					zoom_selecting = true;
+					zoom_selection_visible = false;
+					zoom_selection_start = PointUtil.point_from_click (start_x, start_y);
+					zoom_selection_end = zoom_selection_start;
+					return;
+				}
 				controller.set_state (Gtk.EventSequenceState.DENIED);
 				return;
 			}
-			var state = controller.get_current_event_state ();
 			if ((state & Gdk.ModifierType.CONTROL_MASK) != 0) {
 				controller.set_state (Gtk.EventSequenceState.DENIED);
 				return;
 			}
+			panning = true;
 			prev_cursor = cursor;
 			cursor = new Gdk.Cursor.from_name ("grabbing", null);
 			drag_start = PointUtil.point_from_click (start_x, start_y);
 		});
 		drag_gesture.drag_end.connect ((ofs_x, ofs_y) => {
+			if (zoom_selecting) {
+				if (zoom_selection_visible) {
+					zoom_to_selection ();
+				}
+				stop_zoom_selection ();
+				return;
+			}
 			if ((drag_start.x != -1) && (drag_start.y != -1)) {
 				cursor = prev_cursor;
 			}
+			panning = false;
+			update_zoom_cursor ();
 		});
 		drag_gesture.drag_update.connect ((controller, ofs_x, ofs_y) => {
 			double start_x, start_y;
 			controller.get_start_point (out start_x, out start_y);
 			double x = start_x + ofs_x;
 			double y = start_y + ofs_y;
+			if (zoom_selecting) {
+				zoom_selection_end = PointUtil.point_from_click (
+					x.clamp (0, viewport.size.width),
+					y.clamp (0, viewport.size.height));
+				if (!zoom_selection_visible
+					&& Gtk.drag_check_threshold (this, (int) start_x, (int) start_y, (int) x, (int) y))
+				{
+					zoom_selection_visible = true;
+				}
+				if (zoom_selection_visible) {
+					queue_draw ();
+				}
+				return;
+			}
 			scroll_by (drag_start.x - x, drag_start.y - y);
 			drag_start = PointUtil.point_from_click (x, y);
+		});
+		drag_gesture.cancel.connect (() => {
+			// Called before drag_end: don't zoom if the drag was cancelled.
+			stop_zoom_selection ();
 		});
 		add_controller (drag_gesture);
 
@@ -393,6 +443,7 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 			_controller.on_size_allocated ();
 		}
 		scroll_on_drag = can_scroll ();
+		update_zoom_cursor ();
 		resized ();
 	}
 
@@ -570,6 +621,12 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 					selection_box.size
 				};
 				snapshot_selection (snapshot, box);
+			}
+			if (zoom_selection_visible) {
+				Graphene.Rect zoom_area;
+				if (get_zoom_selection (out zoom_area)) {
+					snapshot_selection (snapshot, zoom_area);
+				}
 			}
 		}
 	}
@@ -1106,6 +1163,7 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 	}
 
 	void before_changing_image () {
+		stop_zoom_selection ();
 		stop_animation ();
 		cancel_filter_update ();
 		viewport.size = { 0, 0 };
@@ -1138,6 +1196,78 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 	public void remove_selection () {
 		selection_box = { { 0, 0 }, { 0, 0 } };
 		queue_draw ();
+	}
+
+	// Zoom so that the given area, in image pixels, is as large as possible
+	// while still entirely visible, and center it in the window.
+	public void zoom_to_area (float x, float y, float width, float height) {
+		if ((_image == null) || (width <= 0) || (height <= 0)) {
+			return;
+		}
+		if ((viewport.size.width <= 0) || (viewport.size.height <= 0)) {
+			return;
+		}
+		_zoom_type = ZoomType.KEEP_PREVIOUS;
+		var new_zoom = set_valid_zoom (float.min (viewport.size.width / width, viewport.size.height / height));
+		update_adjustments (
+			(x + width / 2) * new_zoom - viewport.size.width / 2,
+			(y + height / 2) * new_zoom - viewport.size.height / 2);
+		update_texture_box ();
+		update_image_box ();
+		queue_resize ();
+	}
+
+	bool can_select_zoom_area () {
+		return _drag_to_zoom && (_image != null) && (_controller == null);
+	}
+
+	// The selected area in widget coordinates, limited to the image.
+	bool get_zoom_selection (out Graphene.Rect area) {
+		var x1 = float.max (float.min (zoom_selection_start.x, zoom_selection_end.x), texture_box.origin.x);
+		var y1 = float.max (float.min (zoom_selection_start.y, zoom_selection_end.y), texture_box.origin.y);
+		var x2 = float.min (float.max (zoom_selection_start.x, zoom_selection_end.x), texture_box.origin.x + texture_box.size.width);
+		var y2 = float.min (float.max (zoom_selection_start.y, zoom_selection_end.y), texture_box.origin.y + texture_box.size.height);
+		area = { { x1, y1 }, { float.max (x2 - x1, 0), float.max (y2 - y1, 0) } };
+		return (area.size.width > 0) && (area.size.height > 0);
+	}
+
+	void zoom_to_selection () {
+		Graphene.Rect area;
+		if (!get_zoom_selection (out area)) {
+			return;
+		}
+		if ((area.size.width < 2) || (area.size.height < 2)) {
+			return;
+		}
+		// From widget coordinates to image pixels.  Keep the fractional
+		// part: at high zoom levels a rounding error here is multiplied by
+		// the zoom factor.
+		var x1 = (area.origin.x - texture_box.origin.x + viewport.origin.x) / _zoom;
+		var y1 = (area.origin.y - texture_box.origin.y + viewport.origin.y) / _zoom;
+		var x2 = (area.origin.x + area.size.width - texture_box.origin.x + viewport.origin.x) / _zoom;
+		var y2 = (area.origin.y + area.size.height - texture_box.origin.y + viewport.origin.y) / _zoom;
+		zoom_to_area (x1, y1, x2 - x1, y2 - y1);
+	}
+
+	void stop_zoom_selection () {
+		var was_visible = zoom_selection_visible;
+		zoom_selecting = false;
+		zoom_selection_visible = false;
+		if (was_visible) {
+			queue_draw ();
+		}
+	}
+
+	void update_zoom_cursor () {
+		if (panning) {
+			return;
+		}
+		var show = can_select_zoom_area () && !scroll_on_drag;
+		if (show == zoom_cursor_visible) {
+			return;
+		}
+		zoom_cursor_visible = show;
+		cursor = show ? new Gdk.Cursor.from_name ("crosshair", null) : null;
 	}
 
 	void init_actions () {
@@ -1421,6 +1551,13 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 	bool scroll_on_drag;
 	float initial_gesture_zoom;
 	Gtk.GestureDrag drag_gesture = null;
+	bool panning = false;
+	bool _drag_to_zoom = false;
+	bool zoom_selecting = false;
+	bool zoom_selection_visible = false;
+	bool zoom_cursor_visible = false;
+	Graphene.Point zoom_selection_start;
+	Graphene.Point zoom_selection_end;
 
 	const float MIN_ZOOM = 0.05f;
 	const float MAX_ZOOM = 10.0f;

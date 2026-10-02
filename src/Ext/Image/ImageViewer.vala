@@ -46,6 +46,7 @@ public class Gth.ImageViewer : Object, Gth.FileViewer {
 
 		image_view.resized.connect (() => update_zoom_info ());
 		image_view.add_drag_gesture ();
+		image_view.drag_to_zoom = settings.get_boolean (PREF_IMAGE_DRAG_TO_ZOOM);
 
 		var scroll_events = new Gtk.EventControllerScroll (Gtk.EventControllerScrollFlags.VERTICAL);
 		scroll_events.scroll.connect ((controller, dx, dy) => {
@@ -771,6 +772,11 @@ public class Gth.ImageViewer : Object, Gth.FileViewer {
 			switch (key) {
 			case PREF_IMAGE_SCROLL_ACTION:
 				scroll_action = (ScrollAction) settings.get_enum (PREF_IMAGE_SCROLL_ACTION);
+				break;
+			case PREF_IMAGE_DRAG_TO_ZOOM:
+				if (image_view != null) {
+					image_view.drag_to_zoom = settings.get_boolean (PREF_IMAGE_DRAG_TO_ZOOM);
+				}
 				break;
 			}
 		});
