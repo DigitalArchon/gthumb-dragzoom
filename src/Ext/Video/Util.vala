@@ -1,7 +1,20 @@
 using Gth;
 
-public Gth.Image? load_video_thumbnail (File file, uint requested_size, Cancellable cancellable) throws Error {
+// The helper is in the private folder, or in the PATH when the program
+// doesn't run from where it was installed (in an AppImage, for example).
+string get_video_thumbnailer () {
 	var command = Path.build_filename (Config.PRIVEXECDIR, "video-thumbnailer");
+	if (!FileUtils.test (command, FileTest.IS_EXECUTABLE)) {
+		var in_path = Environment.find_program_in_path ("video-thumbnailer");
+		if (in_path != null) {
+			command = in_path;
+		}
+	}
+	return command;
+}
+
+public Gth.Image? load_video_thumbnail (File file, uint requested_size, Cancellable cancellable) throws Error {
+	var command = get_video_thumbnailer ();
 	var tmp_output = Files.get_temp_file (".png");
 	string[] argv = {
 		command,
