@@ -1,0 +1,37 @@
+# Build environment for the gThumb AppImage.
+#
+# Every input is pinned so that the AppImage can be rebuilt bit for bit:
+# the Arch Linux base image by digest, all packages from one Arch Linux
+# Archive snapshot, and quick-sharun by commit and checksum (it pins the
+# tools it downloads in the same way).
+FROM docker.io/library/archlinux@sha256:b21322c663be387c0ed9cbc7bbbfe18e41633ad4e7b7c77cfad45f128be20040
+
+ARG ARCHIVE_DATE=2026/10/01
+ARG QUICK_SHARUN_COMMIT=5d00649d56d4196e59a632bd47d1660d1ee4acfa
+ARG QUICK_SHARUN_SHA256=8026711b271c0d67d37075cd7e8c50dbd9fa635c012f9edb92a2c0d41573664b
+
+# The base image leaves out translations, which the AppImage must include
+# (GTK, libadwaita and GLib have their own).  Reinstall the packages already
+# in the image to add the files that were left out.
+RUN sed -i -e '/^NoExtract.*\(locale\|i18n\)/d' /etc/pacman.conf && \
+    echo "Server = https://archive.archlinux.org/repos/$ARCHIVE_DATE/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist && \
+    pacman -Syyuu --noconfirm && \
+    pacman -Qqn | pacman -S --noconfirm - && \
+    pacman -S --noconfirm --needed \
+        base-devel git meson ninja vala cmake pkgconf python wget file patchelf desktop-file-utils \
+        glib2 glib2-devel gtk4 libadwaita gsettings-desktop-schemas \
+        exiv2 lcms2 colord libpng libjpeg-turbo zlib libwebp librsvg libheif libjxl libtiff giflib libraw \
+        libportal libportal-gtk4 \
+        gstreamer gst-plugins-base gst-plugins-base-libs gst-plugins-good gst-libav gst-plugin-gtk4 \
+        dconf gvfs adwaita-icon-theme hicolor-icon-theme mesa \
+        xorg-server-xvfb dbus strace ttf-dejavu 7zip jq zsync libxrandr libxss && \
+    pacman -Scc --noconfirm
+
+# DocBook, pulled in by the build tools, is not needed in the AppImage but
+# would be copied into it because libxml2 refers to /usr/share/xml.
+RUN pacman -Rdd --noconfirm docbook-xml docbook-xsl 2>/dev/null || true
+
+RUN wget -q -O /usr/local/bin/quick-sharun \
+        https://raw.githubusercontent.com/pkgforge-dev/Anylinux-AppImages/$QUICK_SHARUN_COMMIT/useful-tools/quick-sharun.sh && \
+    echo "$QUICK_SHARUN_SHA256  /usr/local/bin/quick-sharun" | sha256sum -c - && \
+    chmod +x /usr/local/bin/quick-sharun

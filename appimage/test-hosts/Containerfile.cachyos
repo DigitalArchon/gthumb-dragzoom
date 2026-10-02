@@ -1,0 +1,6 @@
+# CachyOS (rolling, current glibc and GTK).
+FROM docker.io/cachyos/cachyos:latest
+RUN pacman -Syu --noconfirm --needed xorg-server-xvfb xdotool imagemagick python dbus dconf glib2 weston \
+        ttf-dejavu libx11 libxfixes adwaita-cursors which && \
+    sed -i 's/^#de_DE.UTF-8/de_DE.UTF-8/' /etc/locale.gen && locale-gen && \
+    pacman -Scc --noconfirm
