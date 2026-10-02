@@ -38,6 +38,7 @@ Enable it in Preferences > Images > Drag Action > "Zoom to Selection"
    spinner: a non-nullable parameter made an async method return without completing.
 5. **Video: find the thumbnailer when the program has been moved**: looks for `video-thumbnailer`
    in the PATH when it isn't in the compiled-in folder, as in the AppImage.
+6. **AppImage: reproducible build and tests** (`appimage/`).
 
 ### Pixel accuracy
 
@@ -52,21 +53,18 @@ Accuracy is in GTK logical pixels.
 
 ## AppImage
 
-Built on Arch Linux and packaged with [sharun/quick-sharun](https://github.com/pkgforge-dev/Anylinux-AppImages)
-("Anylinux" AppImage): it bundles every library including glibc, Mesa's hardware drivers and
-GStreamer (with libav), so it doesn't depend on the host's GTK 4 (4.18.5 or later is required, while
-Linux Mint 22 has 4.14) or glibc. About 92 MB.
+`appimage/` builds an AppImage that bundles every library including glibc, Mesa and GStreamer
+(with libav), so it doesn't depend on the host's GTK 4 (4.18.5 or later is required, while
+Linux Mint 22 has 4.14) or glibc. The build is reproducible: every input is pinned and building a
+release tag again gives an identical file. See `appimage/README.md`.
 
 - Settings are stored in the user's normal dconf database; translations are included.
 - Uses native Wayland when available, else X11.
-- Without a GPU (`/dev/dri/renderD*`), it uses GTK's cairo renderer, as a native GTK does on such
-  systems; set `GSK_RENDERER` to override.
-- The build scripts and tests live outside this repository, in `../build-env` (see its README).
 
 ## Tests
 
-Run against the AppImage on Ubuntu 24.04 (glibc 2.39, the Linux Mint 22.3 base) and CachyOS
-(glibc 2.44) test containers:
+`appimage/test.sh` runs the tests against the AppImage on Ubuntu 24.04 (glibc 2.39, the
+Linux Mint 22.3 base) and CachyOS (glibc 2.44) containers:
 
 - 38 automated drag-to-zoom checks under Xvfb, using a test image whose colours encode pixel
   coordinates, so screenshots can be decoded exactly: five zoom scenarios (width- and

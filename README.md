@@ -1,3 +1,18 @@
+> **This is a fork of gThumb 4.0 that adds drag to zoom.**
+> I missed this feature from ACDSee, and gThumb made it relatively easy to implement.
+> I didn't want to create a Gitlab account just to do a PR for this, so I forked here instead.
+>
+> When an image fits the window, drag over part of it and the view zooms to exactly that area,
+> filling the window with it. Turn it on in Preferences > Images > Drag Action > "Zoom to Selection".
+> The fork also fixes three gThumb 4.0 bugs found while adding the feature: imprecise drawing
+> when zoomed in, dragging that stopped working after a file had been dragged out of the viewer,
+> and an empty browser when the Pictures, Videos or Downloads folder is not set.
+>
+> Download the AppImage from the [releases](https://github.com/DigitalArchon/gthumb/releases):
+> it runs on Linux Mint 22, CachyOS and other x86-64 distributions, without installing anything.
+> Its build is reproducible from this repository. Details: [FORK-NOTES.md](FORK-NOTES.md),
+> [appimage/README.md](appimage/README.md). Original README below.
+
 # Thumbnails
 
 Image viewer, editor, browser and organizer.
