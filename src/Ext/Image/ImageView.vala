@@ -236,6 +236,21 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 		});
 		add_controller (drag_gesture);
 
+		// When the viewer drags the file, the button release doesn't reach
+		// the gesture, which then ignores the following presses.  A new
+		// press means the previous drag is over: reset the gesture.
+		var press_events = new Gtk.EventControllerLegacy ();
+		press_events.propagation_phase = Gtk.PropagationPhase.CAPTURE;
+		press_events.event.connect ((event) => {
+			if ((event.get_event_type () == Gdk.EventType.BUTTON_PRESS)
+				&& (((Gdk.ButtonEvent) event).get_button () == Gdk.BUTTON_PRIMARY))
+			{
+				drag_gesture.reset ();
+			}
+			return false;
+		});
+		add_controller (press_events);
+
 		var motion_controller = new Gtk.EventControllerMotion ();
 		motion_controller.motion.connect ((x, y) => {
 			last_position = PointUtil.point_from_click (x, y);
