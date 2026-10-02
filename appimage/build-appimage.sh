@@ -39,7 +39,7 @@ export OUTPATH=/tmp/dist
 export OUTNAME="gThumb-$VERSION-anylinux-$ARCH.AppImage"
 export DESKTOP=/usr/share/applications/org.gnome.gthumb.desktop
 export ICON=/usr/share/icons/hicolor/256x256/apps/org.gnome.gthumb.png
-export UPINFO="gh-releases-zsync|DigitalArchon|gthumb|latest|gThumb-*-anylinux-$ARCH.AppImage.zsync"
+export UPINFO="gh-releases-zsync|DigitalArchon|gthumb-dragzoom|latest|gThumb-*-anylinux-$ARCH.AppImage.zsync"
 # Video support: the GStreamer plugins, with libav for common codecs.
 export DEPLOY_GSTREAMER=1
 # Paths compiled into the libraries (/usr/share, ...) are replaced by links

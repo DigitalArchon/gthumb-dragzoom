@@ -8,7 +8,7 @@
 > when zoomed in, dragging that stopped working after a file had been dragged out of the viewer,
 > and an empty browser when the Pictures, Videos or Downloads folder is not set.
 >
-> Download the AppImage from the [releases](https://github.com/DigitalArchon/gthumb/releases):
+> Download the AppImage from the [releases](https://github.com/DigitalArchon/gthumb-dragzoom/releases):
 > it runs on Linux Mint 22, CachyOS and other x86-64 distributions, without installing anything.
 > Its build is reproducible from this repository. Details: [FORK-NOTES.md](FORK-NOTES.md),
 > [appimage/README.md](appimage/README.md). Original README below.
