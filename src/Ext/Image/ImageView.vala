@@ -383,7 +383,7 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 
 	public bool get_pixel_at_position (double pointer_x, double pointer_y, out uint pixel_x, out uint pixel_y) {
 		var inside = true;
-		var px = (int) image_box.origin.x + (pointer_x - texture_box.origin.x) / _zoom;
+		var px = (int) Math.floor ((pointer_x - texture_box.origin.x + viewport.origin.x) / _zoom);
 		if (px < 0) {
 			px = 0;
 			inside = false;
@@ -395,7 +395,7 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 			inside = false;
 		}
 
-		var py = (int) image_box.origin.y + (pointer_y - texture_box.origin.y) / _zoom;
+		var py = (int) Math.floor ((pointer_y - texture_box.origin.y + viewport.origin.y) / _zoom);
 		if (py < 0) {
 			py = 0;
 			inside = false;
@@ -416,6 +416,7 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 		// Util.print_rectangle ("> image_box:", image_box);
 		// Util.print_rectangle ("> texture_box:", texture_box);
 		snapshot.save ();
+		snapshot.push_clip (texture_box);
 
 		bool has_alpha;
 		if (image.get_has_alpha (out has_alpha) && has_alpha) {
@@ -443,7 +444,7 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 			// stdout.printf ("> snapshot: filtered_texture\n");
 			snapshot.append_scaled_texture (filtered_texture,
 				Gsk.ScalingFilter.NEAREST,
-				texture_box);
+				draw_box);
 		}
 		else if (rendered_image != null) {
 			// stdout.printf ("> snapshot: rendered_image\n");
@@ -455,7 +456,7 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 			if (texture != null) {
 				snapshot.append_scaled_texture (texture,
 					(_zoom * rendered_zoom > MAX_FILTERED_ZOOM) ? Gsk.ScalingFilter.NEAREST : Gsk.ScalingFilter.LINEAR,
-					texture_box);
+					draw_box);
 			}
 		}
 		else if ((image_box.size.width > MAX_FILTERED_SIZE)
@@ -468,14 +469,14 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 				(uint) image_box.size.width,
 				(uint) image_box.size.height
 			).resize_fast (
-				(uint) texture_box.size.width,
-				(uint) texture_box.size.height
+				(uint) draw_box.size.width,
+				(uint) draw_box.size.height
 			);
 			if (scaled != null) {
 				var texture = scaled.get_texture ();
 				snapshot.append_scaled_texture (texture,
 					Gsk.ScalingFilter.NEAREST,
-					texture_box);
+					draw_box);
 			}
 		}
 		else {
@@ -489,9 +490,10 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 			if (texture != null) {
 				snapshot.append_scaled_texture (texture,
 					(_zoom > MAX_FILTERED_ZOOM) ? Gsk.ScalingFilter.NEAREST : Gsk.ScalingFilter.LINEAR,
-					texture_box);
+					draw_box);
 			}
 		}
+		snapshot.pop ();
 		snapshot.restore ();
 	}
 
@@ -767,11 +769,17 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 
 		if (_image == null) {
 			image_box = { { 0, 0 },	{ 0, 0 } };
+			draw_box = { { 0, 0 },	{ 0, 0 } };
 			return;
 		}
 
 		uint natural_width, natural_height;
 		_image.get_natural_size (out natural_width, out natural_height);
+
+		// The whole image pixels that cover the visible area.  The first
+		// and last ones can be partially visible: rounding them to whole
+		// pixels would shift and stretch the image by up to one image
+		// pixel, which is many screen pixels at high zoom levels.
 
 		float image_x, image_width;
 		if (texture_box.origin.x > 0) {
@@ -780,10 +788,8 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 		}
 		else {
 			image_x = Math.floorf (viewport.origin.x / _zoom);
-			image_width = Math.floorf ((float) viewport.size.width / _zoom);
-			if (image_x + image_width > natural_width) {
-				image_width = natural_width - image_x;
-			}
+			var image_x2 = Math.ceilf ((viewport.origin.x + viewport.size.width) / _zoom);
+			image_width = float.min (image_x2, natural_width) - image_x;
 		}
 
 		float image_y, image_height;
@@ -793,15 +799,25 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 		}
 		else {
 			image_y = Math.floorf (viewport.origin.y / _zoom);
-			image_height = Math.floorf ((float) viewport.size.height / _zoom);
-			if (image_y + image_height > natural_height) {
-				image_height = natural_height - image_y;
-			}
+			var image_y2 = Math.ceilf ((viewport.origin.y + viewport.size.height) / _zoom);
+			image_height = float.min (image_y2, natural_height) - image_y;
 		}
 
 		image_box = {
 			{ image_x, image_y },
 			{ image_width, image_height }
+		};
+
+		// Where image_box is drawn: the image pixel (x, y) is at
+		// texture_box.origin + (x, y) * zoom - viewport.origin, as assumed
+		// when mapping widget coordinates to image coordinates.  The parts
+		// outside texture_box are clipped.
+		draw_box = {
+			{
+				texture_box.origin.x + (image_x * _zoom) - viewport.origin.x,
+				texture_box.origin.y + (image_y * _zoom) - viewport.origin.y
+			},
+			{ image_width * _zoom, image_height * _zoom }
 		};
 		queue_update_scaled_texture ();
 		//Util.print_rectangle ("> update_image_box: ", image_box);
@@ -1040,16 +1056,16 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 						rendered_zoom * image_box.origin.y,
 					},
 					{
-						rendered_zoom * Math.floorf (texture_box.size.width / _zoom),
-						rendered_zoom * Math.floorf (texture_box.size.height / _zoom)
+						rendered_zoom * image_box.size.width,
+						rendered_zoom * image_box.size.height
 					}
 				};
-				scaler = new TextureScaler (rendered_box, texture_box);
+				scaler = new TextureScaler (rendered_box, draw_box);
 				image_to_scale = rendered_image;
 			}
 			else {
 				// stdout.printf ("> UPDATE_SCALED_TEXTURE(%u): rendered_image == null\n", local_count);
-				scaler = new TextureScaler (image_box, texture_box);
+				scaler = new TextureScaler (image_box, draw_box);
 				image_to_scale = _image;
 			}
 
@@ -1079,6 +1095,7 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 		cancel_filter_update ();
 		viewport.size = { 0, 0 };
 		image_box = { { 0, 0 }, { 0, 0 } };
+		draw_box = { { 0, 0 }, { 0, 0 } };
 		texture_box = { { 0, 0 }, { 0, 0 } };
 		filtered_texture = null;
 		rendered_image = null;
@@ -1358,8 +1375,10 @@ public class Gth.ImageView : Gtk.Widget, Gtk.Scrollable {
 	public Graphene.Rect viewport;
 	// Position and size of the texture node
 	public Graphene.Rect texture_box;
-	// Visible area of the image
+	// Image pixels to draw: the visible area rounded out to whole pixels
 	Graphene.Rect image_box;
+	// Where image_box is drawn, in widget coordinates; clipped to texture_box
+	Graphene.Rect draw_box;
 	Graphene.Rect selection_box;
 	Gtk.Adjustment _hadjustment;
 	Gtk.Adjustment _vadjustment;
